@@ -2,18 +2,131 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <title>bash&expect</title>
 </head>
 <body>
-    <br>
-    <br>
-    <br>
-    <br>
-    <br>
-    <br>
-    <marquee style="color:red;font-size:40px">只有坚持</marquee>
-    <br>
-    <marquee style="color:yellow;font-size:40px">未来才有希望</marquee>
+    <h2>脚本1：检查各主机的mount分区使用率</h2>
+#!/bin/bash
+
+function _expect(){
+	local IP=$1
+	local USER=$2
+	local PASSWD=$3
+	local SOURE_IP=$4
+	local PASSWD1=$5
+	expect <<-EOF &>/dev/null
+	spawn ssh $USER@$IP
+	expect {
+		"yes/no" { send "yes\r"; exp_continue }
+		"*assword:" { send "$PASSWD\r" };
+	}
+	set timeout 2
+	expect -re "#|>"
+	send "df -h | awk 'BEGIN{ORS=\";\"; printf \"\'\"$IP\"\'\"\",\"} (\\\$1!~/.*loop\[0-9\]/) && (int(\\\$(NF-1))>=90){print \\\$NF\":\"\\\$(NF-1)} END{printf \"\\\n\"}' | ssh root@$SOURE_IP 'cat - >> ${_PATH}/log/check_${_file}.csv'\r"
+	expect {
+                "yes/no" { send "yes\r"; exp_continue }
+                "*assword:" { send "$PASSWD1\r" };
+        }
+	send "exit\r"
+	expect eof
+	EOF
+}
+
+function main(){
+	export _PATH=`pwd`
+	if [[ ! -d ${_PATH}/log ]]; then
+		mkdir ${_PATH}/log
+	fi
+	soure_ip=`ip a s bond1 | grep "\<inet\>" | awk 'BEGIN{FS="[ /]+"} {print $3}'`
+	_file=`date +%Y%m%d%H%M%S`
+	thread=${1:-10}
+	read -s -p "Please enter the local user password to facilitate remote component transfer log to the machine:" soure_password
+	echo
+        tmp_fifofile=/tmp/$$.fifo
+        mkfifo $tmp_fifofile
+        exec 8<> $tmp_fifofile
+        rm $tmp_fifofile
+	first=0
+        for i in `seq $thread`; do
+                echo >&8
+        done
+	for list in `cat Clients.csv`; do
+        	if [[ $first == 0 ]]; then
+                	first=1 
+			continue
+        	fi
+		ip=`echo $list | awk -F"," '{print $1}'`
+                user=`echo $list | awk -F"," '{print $2}'`
+                password=`echo $list | awk -F"," '{print $3}'`
+		read -u 8
+		{
+		_expect $ip $user ${password} $soure_ip $soure_password
+		echo "$ip checked"
+		echo >&8
+		}&
+	done
+	wait
+        exec 8>&-
+	if [[ -f ${_PATH}/log/check_${_file}.csv ]]; then
+		echo "finished"
+	else
+		echo "Execution failed, the local password may be wrong, please check"
+	fi
+
+}
+
+main $1 
     
+ <h2>脚本2：检查主机是否能ssh登录</h2>
+    #/usr/bin/env bash
+
+if [[ -f Clients.csv ]]; then
+	thread=${1:-10}
+	tmp_fifofile=/tmp/$$.fifo
+	mkfifo $tmp_fifofile
+	exec 8<> $tmp_fifofile
+	rm $tmp_fifofile
+	for i in `seq $thread`; do
+		echo >&8
+	done
+        >login.log
+	i=0
+	for list in $(cat Clients.csv); do
+	if [[ $i == 0 ]]; then
+		i=1
+		continue
+	fi
+	ip=`echo $list | awk -F"," '{print $1}'`
+        user=`echo $list | awk -F"," '{print $2}'`
+        password=`echo $list | awk -F"," '{print $3}'`
+	read -u 8
+	{
+	/usr/bin/expect >/dev/null 2>&1 <<-EOF
+	
+	spawn ssh ${user}@${ip}
+	set timeout 3
+	expect {
+		-re "yes/no" { send "yes\r"; exp_continue }
+		-re ".*assword:" { send "${password}\r" };
+	}
+	expect -re "\[#>]" { send "exit\r" }
+	expect {
+		timeout { exit 1 }
+		eof { exit 0 }
+	}
+	EOF
+#	echo $?
+	if [[ $? -eq 0 ]]; then
+		printf "%-15s -------------------- ok\n" $ip  | tee -a  login.log
+	else
+		printf "%-15s -------------------- falied\n" $ip | tee -a login.log
+	fi
+	echo >&8
+	}&
+	done
+	wait
+	exec 8>&-
+	echo "finishi..."
+fi
 </body>
 </html>
