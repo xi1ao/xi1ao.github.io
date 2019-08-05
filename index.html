@@ -6,6 +6,7 @@
 </head>
 <body>
     <h2>脚本1：检查各主机的mount分区使用率</h2>
+<pre style="word-wrap: break-word; white-space: pre-wrap;font-size:30px">
 #!/bin/bash
 
 function _expect(){
@@ -75,11 +76,12 @@ function main(){
 
 }
 
-main $1 
+main $1
+</pre>
     
  <h2>脚本2：检查主机是否能ssh登录</h2>
-<pre style="word-wrap: break-word; white-space: pre-wrap;">
-"#/usr/bin/env bash
+<pre style="word-wrap: break-word; white-space: pre-wrap;font-size:30px">
+#/usr/bin/env bash
 
 if [[ -f Clients.csv ]]; then
 	thread=${1:-10}
@@ -129,7 +131,6 @@ if [[ -f Clients.csv ]]; then
 	exec 8&gt;&amp;-
 	echo "finishi..."
 fi
-"
 </pre>
 </body>
 </html>
